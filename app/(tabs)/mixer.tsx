@@ -1,63 +1,13 @@
 import Slider from "@react-native-community/slider";
-import type { AVPlaybackStatus, AVPlaybackStatusSuccess } from "expo-av";
-import { Audio } from "expo-av";
-import { atom, useAtom } from "jotai";
+import { useAtom } from "jotai";
 import * as React from "react";
-import { Text, View } from "react-native";
-
-// simple atoms for this tab
-const masterGainAtom = atom(0.8);
-const isOnAtom = atom(false);
-
-// type guard to narrow AVPlaybackStatus
-function isSuccess(s: AVPlaybackStatus): s is AVPlaybackStatusSuccess {
-  return "isLoaded" in s && s.isLoaded === true;
-}
+import { Switch, Text, View } from "react-native";
+import { catalogAtom, masterGainAtom, mixStateAtom } from "../../app/state/mix";
 
 export default function MixerScreen() {
+  const [catalog] = useAtom(catalogAtom);
+  const [mix, setMix] = useAtom(mixStateAtom);
   const [master, setMaster] = useAtom(masterGainAtom);
-  const [isOn, setOn] = useAtom(isOnAtom);
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-
-  React.useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      // lazy load the sound once
-      if (!soundRef.current) {
-        const { sound } = await Audio.Sound.createAsync(
-          require("../../assets/sounds/mixkit-arcade-game-jump-coin-216.wav"),
-          { isLooping: true, shouldPlay: false, volume: master }
-        );
-        if (!mounted) return;
-        soundRef.current = sound;
-      }
-
-      const s = soundRef.current;
-      if (!s) return;
-
-      await s.setVolumeAsync(master);
-
-      const status = await s.getStatusAsync();
-      if (!isSuccess(status)) return;
-
-      if (isOn && !status.isPlaying) {
-        await s.playAsync();
-      } else if (!isOn && status.isPlaying) {
-        await s.pauseAsync();
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [master, isOn]);
-
-  React.useEffect(() => {
-    return () => {
-      soundRef.current?.unloadAsync().catch(() => {});
-    };
-  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: "black", padding: 16 }}>
@@ -66,12 +16,13 @@ export default function MixerScreen() {
           color: "white",
           fontSize: 22,
           fontWeight: "700",
-          marginBottom: 16,
+          marginBottom: 12,
         }}
       >
-        Sleep Mixer (prototype)
+        Mixer
       </Text>
 
+      {/* Master */}
       <View
         style={{
           backgroundColor: "#181818",
@@ -89,25 +40,60 @@ export default function MixerScreen() {
         />
       </View>
 
-      <View
-        style={{ backgroundColor: "#181818", padding: 12, borderRadius: 12 }}
-      >
-        <Text style={{ color: "white", marginBottom: 8 }}>
-          Single track toggle
-        </Text>
-        <Text
-          onPress={() => setOn((v) => !v)}
-          style={{
-            color: "white",
-            paddingVertical: 10,
-            textAlign: "center",
-            borderRadius: 8,
-            backgroundColor: isOn ? "#2e7d32" : "#6d1b1b",
-          }}
-        >
-          {isOn ? "On (tap to stop)" : "Off (tap to play)"}
-        </Text>
-      </View>
+      {/* Tracks */}
+      {catalog.map((t) => {
+        const s = mix[t.id];
+        return (
+          <View
+            key={t.id}
+            style={{
+              backgroundColor: "#181818",
+              padding: 12,
+              borderRadius: 12,
+              marginBottom: 12,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "600" }}>
+                {t.name}
+              </Text>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <Text style={{ color: "white" }}>On</Text>
+                <Switch
+                  value={s?.isOn ?? false}
+                  onValueChange={(v) =>
+                    setMix((prev) => ({
+                      ...prev,
+                      [t.id]: { ...(prev[t.id] ?? { gain: 0.6 }), isOn: v },
+                    }))
+                  }
+                />
+              </View>
+            </View>
+
+            <Text style={{ color: "white", marginTop: 8 }}>Volume</Text>
+            <Slider
+              value={s?.gain ?? 0.6}
+              minimumValue={0}
+              maximumValue={1}
+              onValueChange={(v) =>
+                setMix((prev) => ({
+                  ...prev,
+                  [t.id]: { ...(prev[t.id] ?? { isOn: false }), gain: v },
+                }))
+              }
+            />
+          </View>
+        );
+      })}
     </View>
   );
 }
