@@ -1,31 +1,36 @@
-import { StyleSheet } from 'react-native';
+import { Audio } from "expo-av";
+import * as React from "react";
+import { Button, Text, View } from "react-native";
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
+export default function TestScreen() {
+  const soundRef = React.useRef<Audio.Sound | null>(null);
 
-export default function TabOneScreen() {
+  const playOnce = async () => {
+    const { sound } = await Audio.Sound.createAsync(
+      require("../../assets/sounds/mixkit-arcade-game-jump-coin-216.wav"),
+      { shouldPlay: true, isLooping: false, volume: 0.6 }
+    );
+    soundRef.current = sound;
+  };
+
+  React.useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/index.tsx" />
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 12,
+        padding: 24,
+      }}
+    >
+      <Text style={{ fontSize: 18 }}>Audio sanity check</Text>
+      <Button title="Play test sound" onPress={playOnce} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
-  },
-});
