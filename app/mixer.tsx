@@ -1,16 +1,27 @@
+import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
+import { useRouter } from "expo-router";
 import { useAtom } from "jotai";
 import * as React from "react";
-import { Switch, Text, View } from "react-native";
-import { catalogAtom, masterGainAtom, mixStateAtom } from "../../app/state/mix";
+import { Pressable, Switch, Text, View } from "react-native";
+import { catalogAtom, masterGainAtom, mixStateAtom } from "./state/mix";
 
 export default function MixerScreen() {
   const [catalog] = useAtom(catalogAtom);
   const [mix, setMix] = useAtom(mixStateAtom);
   const [master, setMaster] = useAtom(masterGainAtom);
+  const router = useRouter();
 
   return (
     <View style={{ flex: 1, backgroundColor: "black", padding: 16 }}>
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        style={{ alignSelf: "flex-end", padding: 8 }}
+        accessibilityLabel="Close mixer"
+      >
+        <Ionicons name="close" size={22} />
+      </Pressable>
       <Text
         style={{
           color: "white",

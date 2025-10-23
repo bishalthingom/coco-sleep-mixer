@@ -4,31 +4,29 @@ import { Audio } from "expo-av";
 import { useAtom } from "jotai";
 import * as React from "react";
 import {
-  Platform,
-  Pressable,
+  Animated,
+  Easing,
+  ImageBackground,
+  Pressable, // ⬅️ added
+  StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
-import { catalogAtom, masterGainAtom, mixStateAtom } from "../../app/state/mix";
+import { catalogAtom, masterGainAtom, mixStateAtom } from "./state/mix";
 
-export default function TestScreen() {
+export default function HomeScreen() {
   const soundRefs = React.useRef<Record<string, Audio.Sound | null>>({});
-  // screen size → button size
   const { width, height } = useWindowDimensions();
   const minSide = Math.min(width, height);
   const diameter = Math.max(120, Math.min(minSide * 0.5, 320));
   const radius = diameter / 2;
 
-  // local play/pause state for the mix
   const [isPlaying, setIsPlaying] = React.useState(false);
-
-  // atoms: catalog (list of tracks), user selections, and master gain
   const [catalog] = useAtom(catalogAtom);
   const [mix] = useAtom(mixStateAtom);
   const [master] = useAtom(masterGainAtom);
 
-  // ensure a track is loaded and volume is set
   const ensureLoaded = React.useCallback(
     async (id: string, source: any, vol: number) => {
       if (!soundRefs.current[id]) {
@@ -51,13 +49,9 @@ export default function TestScreen() {
 
   const togglePlayPause = async () => {
     const selected = catalog.filter((t) => mix[t.id]?.isOn);
-    if (selected.length === 0) {
-      // no tracks selected; later we can show a toast
-      return;
-    }
+    if (selected.length === 0) return;
 
     if (!isPlaying) {
-      // load + play selected tracks
       for (const t of selected) {
         const vol = (mix[t.id]?.gain ?? 0.6) * master;
         await ensureLoaded(t.id, t.source, vol);
@@ -70,7 +64,6 @@ export default function TestScreen() {
       }
       setIsPlaying(true);
     } else {
-      // pause every loaded track
       for (const id of Object.keys(soundRefs.current)) {
         try {
           const st = await soundRefs.current[id]!.getStatusAsync();
@@ -85,14 +78,13 @@ export default function TestScreen() {
 
   React.useEffect(() => {
     if (!isPlaying) return;
-
     let cancelled = false;
+
     (async () => {
       const selectedIds = new Set(
         catalog.filter((t) => mix[t.id]?.isOn).map((t) => t.id)
       );
 
-      // start any newly-enabled tracks
       for (const t of catalog) {
         const wantOn = selectedIds.has(t.id);
         const s = soundRefs.current[t.id];
@@ -107,7 +99,6 @@ export default function TestScreen() {
             }
           } catch {}
         } else if (s) {
-          // turn off tracks no longer selected
           try {
             const st = await s.getStatusAsync();
             if (!cancelled && isSuccess(st) && st.isPlaying) {
@@ -117,7 +108,6 @@ export default function TestScreen() {
         }
       }
 
-      // update volume for all loaded tracks
       for (const t of catalog) {
         const s = soundRefs.current[t.id];
         if (!s) continue;
@@ -143,41 +133,110 @@ export default function TestScreen() {
     };
   }, []);
 
-  return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Pressable
-        onPress={togglePlayPause}
-        android_ripple={{ color: "#00000022", radius }}
-        style={({ pressed }) => ({
-          width: diameter,
-          height: diameter,
-          borderRadius: radius,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: pressed ? "#1f2937" : "#111827",
-          ...Platform.select({
-            ios: {
-              shadowColor: "#000",
-              shadowOpacity: 0.25,
-              shadowRadius: 16,
-              shadowOffset: { width: 0, height: 12 },
-            },
-            android: { elevation: 8 },
-          }),
-        })}
-        accessibilityRole="button"
-        accessibilityLabel={isPlaying ? "Pause mix" : "Play mix"}
-      >
-        <FontAwesome
-          name={isPlaying ? "pause" : "play"}
-          size={Math.max(48, diameter * 0.28)}
-          color="#ffffff"
-        />
-      </Pressable>
+  const glow = React.useRef(new Animated.Value(0)).current;
 
-      <Text style={{ marginTop: 16, fontSize: 16, color: "#6b7280" }}>
-        {isPlaying ? "Playing selected mix" : "Paused"}
-      </Text>
-    </View>
+  React.useEffect(() => {
+    if (isPlaying) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glow, {
+            toValue: 1,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false, // animates shadow props on iOS
+          }),
+          Animated.timing(glow, {
+            toValue: 0,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
+    } else {
+      glow.stopAnimation(() => glow.setValue(0));
+    }
+  }, [isPlaying]);
+
+  const shadowOpacity = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0.8],
+  });
+
+  const shadowRadius = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [16, 36],
+  });
+
+  return (
+    <ImageBackground
+      source={require("../assets/images/cats-cute-night.jpg")}
+      style={styles.bg}
+      resizeMode="cover"
+    >
+      <View style={styles.content}>
+        <Animated.View
+          style={{
+            // pulsing halo
+            shadowColor: "#8ab8ff",
+            shadowOpacity,
+            shadowRadius,
+            shadowOffset: { width: 0, height: 0 },
+            // Android fallback: elevation cannot animate, but a fixed value still gives a soft aura
+            elevation: 16,
+            borderRadius: radius,
+          }}
+        >
+          <Pressable
+            onPress={togglePlayPause}
+            android_ripple={{ color: "#00000022", radius }}
+            style={({ pressed }) => ({
+              width: diameter,
+              height: diameter,
+              borderRadius: radius,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? "#1f2937" : "#111827",
+            })}
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? "Pause mix" : "Play mix"}
+          >
+            <FontAwesome
+              name={isPlaying ? "pause" : "play"}
+              size={Math.max(48, diameter * 0.28)}
+              color="#ffffff"
+            />
+          </Pressable>
+        </Animated.View>
+
+        <Text style={styles.status}>
+          {isPlaying ? "Playing selected mix" : "Paused"}
+        </Text>
+      </View>
+    </ImageBackground>
   );
 }
+
+const styles = StyleSheet.create({
+  bg: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  title: {
+    color: "white",
+    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  status: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "white",
+    opacity: 0.85,
+  },
+});

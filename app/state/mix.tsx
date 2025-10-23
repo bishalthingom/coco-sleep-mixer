@@ -31,8 +31,8 @@ export type MixState = Record<string, TrackState>;
 
 // Default: both off
 export const mixStateAtom = atom<MixState>({
-  soundA: { isOn: false, gain: 0.6 },
-  soundB: { isOn: false, gain: 0.6 },
+  soundPiano: { isOn: false, gain: 0.6 },
+  soundChatter: { isOn: false, gain: 0.6 },
 });
 
 // Global master for convenience
