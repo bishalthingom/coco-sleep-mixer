@@ -37,6 +37,14 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: "transparent" }, // no opaque card
         }}
       />
+      <Stack.Screen
+        name="settings"
+        options={{
+          presentation: "transparentModal",
+          animation: "slide_from_bottom",
+          contentStyle: { backgroundColor: "transparent" },
+        }}
+      />
     </Stack>
   );
 }

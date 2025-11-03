@@ -23,6 +23,8 @@ export default function HomeScreen() {
   const minSide = Math.min(width, height);
   const diameter = Math.max(120, Math.min(minSide * 0.5, 320));
   const radius = diameter / 2;
+  const smallDiameter = Math.max(96, Math.min(minSide * 0.35, 220));
+  const smallRadius = smallDiameter / 2;
 
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [catalog] = useAtom(catalogAtom);
@@ -136,6 +138,8 @@ export default function HomeScreen() {
   }, []);
 
   const glow = React.useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   React.useEffect(() => {
     if (isPlaying) {
@@ -176,17 +180,43 @@ export default function HomeScreen() {
       style={styles.bg}
       resizeMode="cover"
     >
+      {/* Floating settings cog (top-right) */}
+      <Pressable
+        onPress={() => router.push("/settings")}
+        hitSlop={8}
+        accessibilityLabel="Open settings"
+        style={{
+          position: "absolute",
+          top: Math.max(insets.top, height * 0.08),
+          right: Math.max(12, width * 0.05),
+          padding: 4,
+          zIndex: 100,
+        }}
+      >
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: "rgba(255,255,255,0.06)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <FontAwesome name="cog" size={25} color="#fff" />
+        </View>
+      </Pressable>
       <View style={styles.content}>
+        {/* Large central play control (restored) */}
         <Animated.View
           style={{
-            // pulsing halo
             shadowColor: "#8ab8ff",
             shadowOpacity,
             shadowRadius,
             shadowOffset: { width: 0, height: 0 },
-            // Android fallback: elevation cannot animate, but a fixed value still gives a soft aura
-            elevation: 16,
+            elevation: 12,
             borderRadius: radius,
+            marginBottom: 16,
           }}
         >
           <Pressable
@@ -205,15 +235,13 @@ export default function HomeScreen() {
           >
             <FontAwesome
               name={isPlaying ? "pause" : "play"}
-              size={Math.max(48, diameter * 0.28)}
+              size={Math.max(52, diameter * 0.28)}
               color="#ffffff"
             />
           </Pressable>
         </Animated.View>
 
-        <Text style={styles.status}>
-          {isPlaying ? "Playing selected mix" : "Paused"}
-        </Text>
+        <Text style={styles.status}>{isPlaying ? "Playing selected mix" : "Paused"}</Text>
         <MiniMixerBar />
       </View>
     </ImageBackground>
