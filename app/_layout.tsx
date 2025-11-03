@@ -39,7 +39,13 @@ export default function RootLayout() {
       />
       Use 'modal' if you want Mixer to slide up; or remove 'presentation' for a
       normal push
-      <Stack.Screen name="mixer" options={{ title: "Mixer" }} />
+      <Stack.Screen
+        name="mixer"
+        options={{
+          title: "Mixer",
+          presentation: "modal", // ⬅️ this makes it slide up as a modal
+        }}
+      />
     </Stack>
   );
 }

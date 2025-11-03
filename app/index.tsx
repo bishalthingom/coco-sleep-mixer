@@ -1,6 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { AVPlaybackStatus, AVPlaybackStatusSuccess } from "expo-av";
 import { Audio } from "expo-av";
+import { useRouter } from "expo-router";
 import { useAtom } from "jotai";
 import * as React from "react";
 import {
@@ -13,6 +14,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { catalogAtom, masterGainAtom, mixStateAtom } from "./state/mix";
 
 export default function HomeScreen() {
@@ -212,8 +214,72 @@ export default function HomeScreen() {
         <Text style={styles.status}>
           {isPlaying ? "Playing selected mix" : "Paused"}
         </Text>
+        <MiniMixerBar />
       </View>
     </ImageBackground>
+  );
+}
+
+function MiniMixerBar() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  return (
+    <Pressable
+      onPress={() => router.push("/mixer")}
+      accessibilityRole="button"
+      accessibilityLabel="Open mixer"
+      style={{
+        position: "absolute",
+        left: 12,
+        right: 12,
+        bottom: Math.max(insets.bottom, 12),
+        borderRadius: 16,
+        backgroundColor: "rgba(20,20,22,0.75)", // translucent, over bg image
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        shadowColor: "#000",
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 6 },
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.08)",
+        backdropFilter: "blur(10px)" as any, // iOS only; harmless elsewhere
+      }}
+    >
+      {/* little grab-handle */}
+      <View
+        style={{
+          alignSelf: "center",
+          width: 36,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: "rgba(255,255,255,0.35)",
+          marginBottom: 10,
+        }}
+      />
+
+      {/* placeholder content (wire to real mix later) */}
+      <Text
+        style={{
+          color: "white",
+          fontSize: 14,
+          opacity: 0.8,
+          marginBottom: 2,
+        }}
+      >
+        Mixer
+      </Text>
+      <Text
+        style={{
+          color: "white",
+          fontSize: 16,
+          fontWeight: "600",
+        }}
+      >
+        Placeholder — tap to open
+      </Text>
+    </Pressable>
   );
 }
 
