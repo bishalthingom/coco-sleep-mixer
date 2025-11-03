@@ -164,8 +164,10 @@ export default function MixerScreen() {
                 color: "white",
                 fontSize: 22,
                 fontWeight: "700",
-                marginBottom: 12,
+                marginTop: 4,
+                marginBottom: 15,
                 paddingHorizontal: 4,
+                textAlign: "center",
               }}
             >
               Mixer
