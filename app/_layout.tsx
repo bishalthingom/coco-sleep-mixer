@@ -43,7 +43,9 @@ export default function RootLayout() {
         name="mixer"
         options={{
           title: "Mixer",
-          presentation: "modal", // ⬅️ this makes it slide up as a modal
+          presentation: "transparentModal", // overlays Home
+          animation: "slide_from_bottom",
+          contentStyle: { backgroundColor: "transparent" }, // no opaque card
         }}
       />
     </Stack>
