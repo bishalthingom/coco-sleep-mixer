@@ -1,8 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
-import { Pressable } from "react-native";
 
 export default function RootLayout() {
   const router = useRouter();
@@ -20,29 +18,20 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack>
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen
         name="index"
-        options={{
-          title: "Sleepy Coco",
-          headerRight: () => (
-            <Pressable
-              onPress={() => router.push("/mixer")}
-              hitSlop={12}
-              style={{ paddingHorizontal: 8 }}
-              accessibilityLabel="Open mixer settings"
-            >
-              <Ionicons name="settings-outline" size={22} />
-            </Pressable>
-          ),
-        }}
+        options={
+          {
+            // header hidden globally
+          }
+        }
       />
       Use 'modal' if you want Mixer to slide up; or remove 'presentation' for a
       normal push
       <Stack.Screen
         name="mixer"
         options={{
-          title: "Mixer",
           presentation: "transparentModal", // overlays Home
           animation: "slide_from_bottom",
           contentStyle: { backgroundColor: "transparent" }, // no opaque card
