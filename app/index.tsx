@@ -11,8 +11,12 @@ import {
   Pressable, // ⬅️ added
   StyleSheet,
   Text,
+  Alert,
   useWindowDimensions,
   View,
+  Modal,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { catalogAtom, masterGainAtom, mixStateAtom } from "./state/mix";
@@ -51,6 +55,92 @@ export default function HomeScreen() {
     return "isLoaded" in s && s.isLoaded === true;
   }
 
+  // Scheduler state & helpers
+  const [scheduledAt, setScheduledAt] = React.useState<Date | null>(null);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const [countdownText, setCountdownText] = React.useState<string | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = React.useState(false);
+  const [timeInput, setTimeInput] = React.useState(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  });
+
+  const clearExistingTimers = () => {
+    try {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current as any);
+        timerRef.current = null;
+      }
+    } catch {}
+    try {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current as any);
+        intervalRef.current = null;
+      }
+    } catch {}
+  };
+
+  const cancelSchedule = React.useCallback(() => {
+    clearExistingTimers();
+    setScheduledAt(null);
+    setCountdownText(null);
+    setShowScheduleModal(false);
+  }, []);
+
+  const scheduleInternal = (target: Date) => {
+    cancelSchedule();
+    setScheduledAt(target);
+    const ms = Math.max(0, target.getTime() - Date.now());
+
+    timerRef.current = setTimeout(() => {
+      // when timer fires, check if any tracks are enabled
+      const selected = catalog.filter((t) => mix[t.id]?.isOn);
+      if (selected.length === 0) {
+        setCountdownText("No tracks selected");
+        cancelSchedule();
+        return;
+      }
+      (async () => {
+        // start playback if not already playing
+        if (!isPlaying) {
+          await togglePlayPause();
+        }
+        cancelSchedule();
+      })();
+    }, ms) as any;
+
+    // update countdown every second
+    intervalRef.current = setInterval(() => {
+      const diff = Math.max(0, target.getTime() - Date.now());
+      if (diff <= 0) {
+        setCountdownText("Starting…");
+        clearExistingTimers();
+        return;
+      }
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      if (mins > 0) setCountdownText(`Starting in ${mins}m ${secs}s…`);
+      else setCountdownText(`Starting in ${secs}s…`);
+    }, 1000) as any;
+  };
+
+  const scheduleIn = (minutes: number) => {
+    const d = new Date(Date.now() + minutes * 60 * 1000);
+    scheduleInternal(d);
+  };
+
+  const scheduleAt = (date: Date) => {
+    // if time has already passed today, schedule for tomorrow
+    const now = Date.now();
+    let target = date;
+    if (date.getTime() - now < 0) {
+      target = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+    }
+    scheduleInternal(target);
+  };
+
+
   const togglePlayPause = async () => {
     const selected = catalog.filter((t) => mix[t.id]?.isOn);
     if (selected.length === 0) return;
@@ -67,6 +157,8 @@ export default function HomeScreen() {
         } catch {}
       }
       setIsPlaying(true);
+      // If a schedule existed, clear it since user started playback manually
+      cancelSchedule();
     } else {
       for (const id of Object.keys(soundRefs.current)) {
         try {
@@ -136,6 +228,13 @@ export default function HomeScreen() {
       ).catch(() => {});
     };
   }, []);
+
+  // clean up scheduler timers on unmount
+  React.useEffect(() => {
+    return () => {
+      cancelSchedule();
+    };
+  }, [cancelSchedule]);
 
   const glow = React.useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -241,8 +340,125 @@ export default function HomeScreen() {
           </Pressable>
         </Animated.View>
 
+        {/* Scheduler row: quick chips + schedule sheet */}
+        {!scheduledAt ? (
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
+            {[10, 20, 30].map((m) => (
+              <TouchableOpacity
+                key={m}
+                onPress={() => scheduleIn(m)}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 20,
+                  backgroundColor: "rgba(255,255,255,0.06)",
+                  marginRight: 10,
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "600" }}>{`${m}m`}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <Pressable
+              onPress={() => setShowScheduleModal(true)}
+              style={({ pressed }) => ({
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 20,
+                backgroundColor: pressed ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)",
+                flexDirection: "row",
+                alignItems: "center",
+              })}
+            >
+              <FontAwesome name="clock-o" size={16} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={{ color: "white", fontWeight: "600" }}>Schedule</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
+            <Text style={{ color: "white", marginRight: 12 }}>{countdownText ?? "Scheduled"}</Text>
+            <TouchableOpacity
+              onPress={cancelSchedule}
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 20,
+                backgroundColor: "rgba(255,255,255,0.06)",
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "600" }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <Text style={styles.status}>{isPlaying ? "Playing selected mix" : "Paused"}</Text>
         <MiniMixerBar />
+
+        {/* Schedule modal: simple HH:MM input */}
+        <Modal visible={showScheduleModal} transparent animationType="slide">
+          <View style={{ flex: 1, justifyContent: "flex-end" }}>
+            <View
+              style={{
+                backgroundColor: "#0b1020",
+                padding: 16,
+                borderTopLeftRadius: 12,
+                borderTopRightRadius: 12,
+                borderColor: "rgba(255,255,255,0.06)",
+                borderWidth: 1,
+              }}
+            >
+              <Text style={{ color: "white", fontSize: 16, fontWeight: "600", marginBottom: 8 }}>Schedule start</Text>
+              <Text style={{ color: "white", opacity: 0.8, marginBottom: 8 }}>Enter a time (HH:MM) to start playback</Text>
+              <TextInput
+                value={timeInput}
+                onChangeText={setTimeInput}
+                placeholder="HH:MM"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numeric"
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.03)",
+                  color: "white",
+                  padding: 12,
+                  borderRadius: 8,
+                  marginBottom: 12,
+                }}
+              />
+
+              <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+                <Pressable
+                  onPress={() => setShowScheduleModal(false)}
+                  style={({ pressed }) => ({ padding: 10, marginRight: 8 })}
+                >
+                  <Text style={{ color: "white", opacity: 0.8 }}>Close</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    // parse HH:MM
+                    const m = timeInput.match(/^(\d{1,2}):(\d{2})$/);
+                    if (!m) {
+                      Alert.alert("Invalid time", "Please enter time as HH:MM (24-hour)");
+                      return;
+                    }
+                    let hh = parseInt(m[1], 10);
+                    const mm = parseInt(m[2], 10);
+                    if (isNaN(hh) || isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+                      Alert.alert("Invalid time", "Please enter a valid 24-hour time");
+                      return;
+                    }
+                    const now = new Date();
+                    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+                    scheduleAt(target);
+                    setShowScheduleModal(false);
+                  }}
+                  style={({ pressed }) => ({ padding: 10 })}
+                >
+                  <Text style={{ color: "#8b5cf6", fontWeight: "600" }}>Schedule</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </ImageBackground>
   );
