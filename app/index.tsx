@@ -14,10 +14,15 @@ import {
   Alert,
   useWindowDimensions,
   View,
+  PanResponder,
   Modal,
-  TextInput,
   TouchableOpacity,
+  SafeAreaView,
+  Platform,
 } from "react-native";
+import { BlurView } from "expo-blur";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { catalogAtom, masterGainAtom, mixStateAtom } from "./state/mix";
 
@@ -54,17 +59,17 @@ export default function HomeScreen() {
   function isSuccess(s: AVPlaybackStatus): s is AVPlaybackStatusSuccess {
     return "isLoaded" in s && s.isLoaded === true;
   }
-
   // Scheduler state & helpers
   const [scheduledAt, setScheduledAt] = React.useState<Date | null>(null);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const [countdownText, setCountdownText] = React.useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = React.useState(false);
-  const [timeInput, setTimeInput] = React.useState(() => {
-    const d = new Date();
+  const [selectedTime, setSelectedTime] = React.useState<Date>(() => new Date());
+
+  const formatTime = (d: Date) => {
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  });
+  };
 
   const clearExistingTimers = () => {
     try {
@@ -85,8 +90,9 @@ export default function HomeScreen() {
     clearExistingTimers();
     setScheduledAt(null);
     setCountdownText(null);
-    setShowScheduleModal(false);
   }, []);
+
+  
 
   const scheduleInternal = (target: Date) => {
     cancelSchedule();
@@ -129,6 +135,7 @@ export default function HomeScreen() {
     const d = new Date(Date.now() + minutes * 60 * 1000);
     scheduleInternal(d);
   };
+ 
 
   const scheduleAt = (date: Date) => {
     // if time has already passed today, schedule for tomorrow
@@ -239,6 +246,89 @@ export default function HomeScreen() {
   const glow = React.useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // Pan/drag for schedule modal (mirror Mixer behavior)
+  const pan = React.useRef(new Animated.Value(0)).current;
+  const backdropOpacity = pan.interpolate({
+    inputRange: [0, 300],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
+  const containerHeightRef = React.useRef<number>(0);
+  const containerWidthRef = React.useRef<number>(0);
+  const TOP_AREA = 72;
+  const BOTTOM_AREA = 72;
+  const HANDLE_HALF_WIDTH = 110;
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+  onStartShouldSetPanResponder: (evt: any, gs: any) => {
+        const y = evt.nativeEvent.locationY ?? 0;
+        const x = evt.nativeEvent.locationX ?? 0;
+        const h = containerHeightRef.current || 0;
+        const w = containerWidthRef.current || 0;
+        const isTop = y < TOP_AREA;
+        const isBottom = h ? y > h - BOTTOM_AREA : false;
+        const centerX = w / 2;
+        const isHandleArea = Math.abs(x - centerX) < HANDLE_HALF_WIDTH;
+        return isTop || isBottom || isHandleArea;
+      },
+  onMoveShouldSetPanResponder: (evt: any, gs: any) => {
+        const y = evt.nativeEvent.locationY ?? 0;
+        const x = evt.nativeEvent.locationX ?? 0;
+        const h = containerHeightRef.current || 0;
+        const w = containerWidthRef.current || 0;
+        const isTop = y < TOP_AREA;
+        const isBottom = h ? y > h - BOTTOM_AREA : false;
+        const centerX = w / 2;
+        const isHandleArea = Math.abs(x - centerX) < HANDLE_HALF_WIDTH;
+        return (
+          (isTop || isBottom || isHandleArea) &&
+          Math.abs(gs.dy) > 6 &&
+          Math.abs(gs.dy) > Math.abs(gs.dx)
+        );
+      },
+      onPanResponderMove: (_: any, gs: any) => {
+        if (gs.dy > 0) pan.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_: any, gs: any) => {
+        const shouldClose = gs.dy > 120 || gs.vy > 0.9;
+        if (shouldClose) {
+          Animated.timing(pan, {
+            toValue: 500,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            // hide the modal after the animation; pan will be reset when modal re-opens
+            setShowScheduleModal(false);
+          });
+        } else {
+          Animated.spring(pan, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 6,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  React.useEffect(() => {
+    if (showScheduleModal) {
+      pan.setValue(0);
+    }
+  }, [showScheduleModal]);
+
+  // animate the schedule sheet closed then hide modal
+  const closeScheduleAnimated = React.useCallback(() => {
+    Animated.timing(pan, {
+      toValue: 500,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowScheduleModal(false);
+    });
+  }, [pan]);
 
   React.useEffect(() => {
     if (isPlaying) {
@@ -360,7 +450,9 @@ export default function HomeScreen() {
             ))}
 
             <Pressable
-              onPress={() => setShowScheduleModal(true)}
+              onPress={() => {
+                setShowScheduleModal(true);
+              }}
               style={({ pressed }) => ({
                 paddingVertical: 8,
                 paddingHorizontal: 12,
@@ -396,67 +488,98 @@ export default function HomeScreen() {
 
         {/* Schedule modal: simple HH:MM input */}
         <Modal visible={showScheduleModal} transparent animationType="slide">
-          <View style={{ flex: 1, justifyContent: "flex-end" }}>
-            <View
+          <View style={{ flex: 1, backgroundColor: "transparent" }}>
+            {/* backdrop similar to mixer (opacity driven by pan) */}
+            <Animated.View
               style={{
-                backgroundColor: "#0b1020",
-                padding: 16,
-                borderTopLeftRadius: 12,
-                borderTopRightRadius: 12,
-                borderColor: "rgba(255,255,255,0.06)",
-                borderWidth: 1,
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                backgroundColor: "rgba(10,10,12,0.25)",
+                opacity: backdropOpacity,
               }}
-            >
-              <Text style={{ color: "white", fontSize: 16, fontWeight: "600", marginBottom: 8 }}>Schedule start</Text>
-              <Text style={{ color: "white", opacity: 0.8, marginBottom: 8 }}>Enter a time (HH:MM) to start playback</Text>
-              <TextInput
-                value={timeInput}
-                onChangeText={setTimeInput}
-                placeholder="HH:MM"
-                placeholderTextColor="rgba(255,255,255,0.3)"
-                keyboardType="numeric"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.03)",
-                  color: "white",
-                  padding: 12,
-                  borderRadius: 8,
-                  marginBottom: 12,
+            />
+
+            <SafeAreaView style={{ flex: 1, padding: 16, justifyContent: "flex-end" }}>
+              <Animated.View
+                {...panResponder.panHandlers}
+                onLayout={(e: any) => {
+                  containerHeightRef.current = e.nativeEvent.layout.height;
+                  containerWidthRef.current = e.nativeEvent.layout.width;
                 }}
-              />
-
-              <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
-                <Pressable
-                  onPress={() => setShowScheduleModal(false)}
-                  style={({ pressed }) => ({ padding: 10, marginRight: 8 })}
-                >
-                  <Text style={{ color: "white", opacity: 0.8 }}>Close</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    // parse HH:MM
-                    const m = timeInput.match(/^(\d{1,2}):(\d{2})$/);
-                    if (!m) {
-                      Alert.alert("Invalid time", "Please enter time as HH:MM (24-hour)");
-                      return;
-                    }
-                    let hh = parseInt(m[1], 10);
-                    const mm = parseInt(m[2], 10);
-                    if (isNaN(hh) || isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
-                      Alert.alert("Invalid time", "Please enter a valid 24-hour time");
-                      return;
-                    }
-                    const now = new Date();
-                    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
-                    scheduleAt(target);
-                    setShowScheduleModal(false);
+                style={{
+                  transform: [{ translateY: pan }],
+                }}
+              >
+                <BlurView
+                  tint="dark"
+                  intensity={60}
+                  style={{
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    paddingHorizontal: 16,
+                    paddingTop: 8,
+                    paddingBottom: 16,
                   }}
-                  style={({ pressed }) => ({ padding: 10 })}
                 >
-                  <Text style={{ color: "#8b5cf6", fontWeight: "600" }}>Schedule</Text>
-                </Pressable>
-              </View>
-            </View>
+                <View {...panResponder.panHandlers} style={{ alignItems: "center", justifyContent: "center", paddingTop: 8, paddingBottom: 4 }}>
+                  <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.35)", marginBottom: 6 }} />
+                  <Pressable
+                    onPress={() => setShowScheduleModal(false)}
+                    hitSlop={12}
+                    style={{ position: "absolute", right: 6, top: 0, padding: 8 }}
+                    accessibilityLabel="Close schedule"
+                  >
+                    <Ionicons name="close" size={22} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <Text style={{ color: "white", fontSize: 22, fontWeight: "700", marginTop: 4, marginBottom: 12, textAlign: "center" }}>Schedule</Text>
+
+                <Text style={{ color: "white", opacity: 0.8, marginBottom: 8 }}>Pick a time to start playback</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <Text style={{ color: "white" }}>Selected: {formatTime(selectedTime)}</Text>
+                </View>
+
+                <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+                  <Pressable onPress={() => { closeScheduleAnimated(); }} style={({ pressed }) => ({ padding: 10, marginRight: 8 })}>
+                    <Text style={{ color: "white", opacity: 0.8 }}>Close</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => {
+                      const now = new Date();
+                      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+                      scheduleAt(target);
+                      closeScheduleAnimated();
+                      
+                    }}
+                    style={({ pressed }) => ({ padding: 10 })}
+                  >
+                      <Text style={{ color: "white", fontWeight: "600" }}>Schedule</Text>
+                  </Pressable>
+                </View>
+                  {/* show DateTimePicker immediately when modal opens */}
+                  {showScheduleModal ? (
+                    <DateTimePicker
+                      value={selectedTime}
+                      mode="time"
+                      is24Hour={true}
+                      display={Platform.OS === "ios" ? "spinner" : "clock"}
+                      onChange={(event: any, date?: Date) => {
+                        if (date) {
+                          setSelectedTime(date);
+                        }
+                        // on Android the picker is a dialog and should be hidden after selection
+                      
+                      }}
+                    />
+                  ) : null}
+                </BlurView>
+              </Animated.View>
+            </SafeAreaView>
           </View>
         </Modal>
       </View>
